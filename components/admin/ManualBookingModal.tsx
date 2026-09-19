@@ -164,7 +164,7 @@ export const ManualBookingModal: React.FC<ManualBookingModalProps> = ({
               <input
                 type="text"
                 required
-                placeholder="Rahim Ahmed"
+                placeholder="Name.."
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-stadium-850 border border-stadium-700 text-stadium-100 placeholder-stadium-500 text-xs focus:outline-none focus:border-pitch-500"
@@ -178,7 +178,7 @@ export const ManualBookingModal: React.FC<ManualBookingModalProps> = ({
               <input
                 type="tel"
                 required
-                placeholder="01701234567"
+                placeholder="01********"
                 value={mobile}
                 onChange={(e) => setMobile(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-stadium-850 border border-stadium-700 text-stadium-100 placeholder-stadium-500 text-xs focus:outline-none focus:border-pitch-500"
@@ -235,13 +235,12 @@ export const ManualBookingModal: React.FC<ManualBookingModalProps> = ({
                       type="button"
                       disabled={!isAvailable}
                       onClick={() => setSelectedSlotId(s.slotId)}
-                      className={`p-2 rounded-xl border text-left text-xs transition-all ${
-                        isSelected
+                      className={`p-2 rounded-xl border text-left text-xs transition-all ${isSelected
                           ? "bg-pitch-500 text-stadium-950 font-bold border-pitch-400 shadow-sm"
                           : isAvailable
-                          ? "bg-stadium-850 hover:bg-stadium-800 border-stadium-700 text-stadium-100"
-                          : "bg-stadium-900/50 border-stadium-800/40 opacity-40 cursor-not-allowed text-stadium-500"
-                      }`}
+                            ? "bg-stadium-850 hover:bg-stadium-800 border-stadium-700 text-stadium-100"
+                            : "bg-stadium-900/50 border-stadium-800/40 opacity-40 cursor-not-allowed text-stadium-500"
+                        }`}
                     >
                       <p className="font-bold">{s.label}</p>
                       <p className={`text-[10px] ${isSelected ? "text-stadium-950" : "text-pitch-400"}`}>
