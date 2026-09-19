@@ -40,6 +40,11 @@ export async function GET(
       });
     }
 
+    // If Cloudinary / External HTTPS URL, redirect directly to the CDN image
+    if (booking.paymentScreenshot.startsWith("http://") || booking.paymentScreenshot.startsWith("https://")) {
+      return NextResponse.redirect(new URL(booking.paymentScreenshot));
+    }
+
     // Return the URL / reference if stored externally
     return NextResponse.json({
       success: true,
