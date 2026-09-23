@@ -30,6 +30,7 @@ import { ManualBookingModal } from "@/components/admin/ManualBookingModal";
 import { AdminCalendarView } from "@/components/admin/AdminCalendarView";
 import { SlotManagement } from "@/components/admin/SlotManagement";
 import { AdminSettings } from "@/components/admin/AdminSettings";
+import { AdminRevenueView } from "@/components/admin/AdminRevenueView";
 import { NotificationsDrawer } from "@/components/admin/NotificationsDrawer";
 import { formatDisplayDate, format12Hour } from "@/lib/utils/date";
 
@@ -40,8 +41,8 @@ export default function AdminDashboardPage() {
   const [adminUser, setAdminUser] = useState<any | null>(null);
   const [authChecking, setAuthChecking] = useState(true);
 
-  // Tab State: "dashboard" | "calendar" | "slots" | "settings"
-  const [activeTab, setActiveTab] = useState<"dashboard" | "calendar" | "slots" | "settings">("dashboard");
+  // Tab State: "dashboard" | "calendar" | "slots" | "settings" | "revenue"
+  const [activeTab, setActiveTab] = useState<"dashboard" | "calendar" | "slots" | "settings" | "revenue">("dashboard");
 
   // Analytics State
   const [analytics, setAnalytics] = useState<any | null>(null);
@@ -268,7 +269,7 @@ export default function AdminDashboardPage() {
                 }`}
             >
               <LayoutDashboard className="w-4 h-4" />
-              <span>Bookings & Overview</span>
+              <span>Booking Overview</span>
             </button>
 
             <button
@@ -290,7 +291,7 @@ export default function AdminDashboardPage() {
                 }`}
             >
               <Clock className="w-4 h-4" />
-              <span>Slot Configurations</span>
+              <span>Slot Configuration</span>
             </button>
 
             <button
@@ -302,6 +303,18 @@ export default function AdminDashboardPage() {
             >
               <Settings className="w-4 h-4" />
               <span>Turf Settings</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("revenue")}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all ${activeTab === "revenue"
+                ? "bg-pitch-500 text-stadium-950 shadow-glow font-black"
+                : "text-stadium-300 hover:text-white hover:bg-stadium-850"
+                }`}
+              id="nav-tab-revenue"
+            >
+              <DollarSign className="w-4 h-4" />
+              <span>Revenue</span>
             </button>
           </nav>
         </div>
@@ -703,6 +716,11 @@ export default function AdminDashboardPage() {
 
         {/* Tab 4: Turf Settings */}
         {activeTab === "settings" && <AdminSettings />}
+
+        {/* Tab 5: Revenue Reports */}
+        {activeTab === "revenue" && (
+          <AdminRevenueView onSelectBooking={handleSelectBookingById} />
+        )}
       </main>
 
       {/* Modals & Drawers */}

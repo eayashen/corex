@@ -48,7 +48,7 @@ export const Hero: React.FC<HeroProps> = ({
           <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
             {/* Top Pill */}
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-pitch-950/80 border border-pitch-500/40 text-pitch-300 text-xs font-semibold shadow-glow animate-pulse-subtle">
-              <Sparkles className="w-3.5 h-3.5 text-pitch-400" />
+              <span className="w-1.5 h-1.5 rounded-full bg-pitch-400" />
               <span>Dhaka&apos;s Premier Football Turf & Academy</span>
               <span className="w-1.5 h-1.5 rounded-full bg-pitch-400" />
               <span className="text-gold-400 font-bold">৳500 Flat Discount</span>

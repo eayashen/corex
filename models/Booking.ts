@@ -18,6 +18,14 @@ export interface IScheduleChangeHistory {
   reason?: string;
 }
 
+export interface IDiscountHistory {
+  previousDiscount: number;
+  newDiscount: number;
+  changedBy: string;
+  timestamp: Date;
+  reason?: string;
+}
+
 export interface IAuditLog {
   action: string;
   actor: "USER" | "ADMIN" | "SYSTEM";
@@ -38,6 +46,8 @@ export interface IBooking extends Document {
   endTime: string;
   regularPrice: number;
   discountedPrice: number;
+  originalPrice: number;
+  specialDiscount: number;
   finalPrice: number;
   paymentRequired: number;
   paymentAmount: number;
@@ -46,7 +56,9 @@ export interface IBooking extends Document {
   paymentScreenshot?: string;
   status: BookingStatus;
   createdBy: CreatedByType;
+  bookingSource: CreatedByType;
   scheduleChangeHistory: IScheduleChangeHistory[];
+  discountHistory: IDiscountHistory[];
   auditLog: IAuditLog[];
   adminNote?: string;
   declineReason?: string;
@@ -77,6 +89,17 @@ const AuditLogSchema = new Schema<IAuditLog>(
     actor: { type: String, enum: ["USER", "ADMIN", "SYSTEM"], required: true },
     timestamp: { type: Date, default: Date.now },
     details: { type: String },
+  },
+  { _id: false }
+);
+
+const DiscountHistorySchema = new Schema<IDiscountHistory>(
+  {
+    previousDiscount: { type: Number, required: true },
+    newDiscount: { type: Number, required: true },
+    changedBy: { type: String, required: true },
+    timestamp: { type: Date, default: Date.now },
+    reason: { type: String },
   },
   { _id: false }
 );
@@ -141,6 +164,16 @@ const BookingSchema = new Schema<IBooking>(
       type: Number,
       required: true,
     },
+    originalPrice: {
+      type: Number,
+      default: function (this: any) {
+        return this.discountedPrice ?? this.finalPrice ?? 0;
+      },
+    },
+    specialDiscount: {
+      type: Number,
+      default: 0,
+    },
     finalPrice: {
       type: Number,
       required: true,
@@ -175,7 +208,15 @@ const BookingSchema = new Schema<IBooking>(
       enum: ["USER", "ADMIN"],
       default: "USER",
     },
+    bookingSource: {
+      type: String,
+      enum: ["USER", "ADMIN"],
+      default: function (this: any) {
+        return this.createdBy || "USER";
+      },
+    },
     scheduleChangeHistory: [ScheduleChangeHistorySchema],
+    discountHistory: [DiscountHistorySchema],
     auditLog: [AuditLogSchema],
     adminNote: {
       type: String,

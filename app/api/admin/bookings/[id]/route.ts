@@ -22,7 +22,24 @@ export async function GET(
       return NextResponse.json({ success: false, error: "Booking not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, booking });
+    // Ensure backwards compatibility for fields
+    const originalPrice = booking.originalPrice ?? booking.discountedPrice ?? booking.finalPrice ?? 0;
+    const specialDiscount = booking.specialDiscount ?? 0;
+    const finalPrice = booking.finalPrice ?? (originalPrice - specialDiscount);
+    const bookingSource = booking.bookingSource ?? booking.createdBy ?? "USER";
+    const discountHistory = booking.discountHistory ?? [];
+
+    return NextResponse.json({
+      success: true,
+      booking: {
+        ...booking,
+        originalPrice,
+        specialDiscount,
+        finalPrice,
+        bookingSource,
+        discountHistory,
+      },
+    });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: "Failed to fetch booking details" }, { status: 500 });
   }
@@ -40,13 +57,37 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await request.json();
-    const { action, declineReason, adminNote, newDate, newSlotId, paymentAmount, transactionId } = body;
+    const {
+      action,
+      declineReason,
+      adminNote,
+      newDate,
+      newSlotId,
+      paymentAmount,
+      transactionId,
+      specialDiscount,
+      discountReason,
+    } = body;
 
     await connectToDatabase();
 
     const booking = await Booking.findById(id);
     if (!booking) {
       return NextResponse.json({ success: false, error: "Booking not found" }, { status: 404 });
+    }
+
+    // Ensure existing fields exist on mongoose document
+    if (booking.originalPrice === undefined || booking.originalPrice === null) {
+      booking.originalPrice = booking.discountedPrice || booking.regularPrice || booking.finalPrice || 0;
+    }
+    if (booking.specialDiscount === undefined || booking.specialDiscount === null) {
+      booking.specialDiscount = 0;
+    }
+    if (!booking.bookingSource) {
+      booking.bookingSource = booking.createdBy || "USER";
+    }
+    if (!booking.discountHistory) {
+      booking.discountHistory = [];
     }
 
     const timestamp = new Date();
@@ -59,11 +100,96 @@ export async function PATCH(
         );
       }
       booking.status = "CONFIRMED";
+
+      // Optional special discount adjustment during approval
+      if (specialDiscount !== undefined) {
+        const newDiscount = Math.max(0, Number(specialDiscount) || 0);
+        if (newDiscount > booking.originalPrice) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Special discount (৳${newDiscount.toLocaleString()}) cannot exceed original price (৳${booking.originalPrice.toLocaleString()}).`,
+            },
+            { status: 400 }
+          );
+        }
+        const prevDiscount = booking.specialDiscount || 0;
+        if (newDiscount !== prevDiscount) {
+          booking.specialDiscount = newDiscount;
+          booking.finalPrice = Math.max(0, booking.originalPrice - newDiscount);
+          booking.discountHistory.push({
+            previousDiscount: prevDiscount,
+            newDiscount,
+            changedBy: admin.name || "ADMIN",
+            timestamp,
+            reason: discountReason || "Special discount applied during booking approval",
+          });
+        }
+      }
+
       booking.auditLog.push({
         action: "Approved by ADMIN",
         actor: "ADMIN",
         timestamp,
-        details: `Approved by ${admin.name} (${admin.email})`,
+        details: `Approved by ${admin.name} (${admin.email})${
+          booking.specialDiscount > 0 ? ` with special discount ৳${booking.specialDiscount}` : ""
+        }`,
+      });
+    } else if (action === "UPDATE_DISCOUNT") {
+      if (specialDiscount === undefined || specialDiscount === null) {
+        return NextResponse.json(
+          { success: false, error: "Special discount amount is required." },
+          { status: 400 }
+        );
+      }
+
+      const numDiscount = Number(specialDiscount);
+      if (isNaN(numDiscount) || numDiscount < 0) {
+        return NextResponse.json(
+          { success: false, error: "Special discount cannot be negative." },
+          { status: 400 }
+        );
+      }
+
+      if (numDiscount > booking.originalPrice) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Special discount (৳${numDiscount.toLocaleString()}) cannot exceed original price (৳${booking.originalPrice.toLocaleString()}).`,
+          },
+          { status: 400 }
+        );
+      }
+
+      const prevDiscount = booking.specialDiscount || 0;
+      const newFinalPrice = Math.max(0, booking.originalPrice - numDiscount);
+
+      booking.specialDiscount = numDiscount;
+      booking.finalPrice = newFinalPrice;
+
+      booking.discountHistory.push({
+        previousDiscount: prevDiscount,
+        newDiscount: numDiscount,
+        changedBy: admin.name || "ADMIN",
+        timestamp,
+        reason:
+          discountReason ||
+          adminNote ||
+          (numDiscount === 0
+            ? "Special discount removed by Admin"
+            : `Special discount updated from ৳${prevDiscount} to ৳${numDiscount}`),
+      });
+
+      booking.auditLog.push({
+        action:
+          numDiscount === 0 && prevDiscount > 0
+            ? "Special discount removed by ADMIN"
+            : "Special discount modified by ADMIN",
+        actor: "ADMIN",
+        timestamp,
+        details: `Discount: ৳${prevDiscount} → ৳${numDiscount}. New Final Price: ৳${newFinalPrice}${
+          discountReason ? ` (Reason: ${discountReason})` : ""
+        }`,
       });
     } else if (action === "DECLINE") {
       if (booking.status !== "PENDING") {
@@ -153,7 +279,8 @@ export async function PATCH(
       booking.endTime = newSlot.endTime;
       booking.regularPrice = newSlot.regularPrice;
       booking.discountedPrice = newSlot.discountedPrice;
-      booking.finalPrice = newSlot.discountedPrice;
+      booking.originalPrice = newSlot.discountedPrice;
+      booking.finalPrice = Math.max(0, newSlot.discountedPrice - (booking.specialDiscount || 0));
     } else if (action === "UPDATE_PAYMENT") {
       if (paymentAmount !== undefined) {
         booking.paymentAmount = Number(paymentAmount);

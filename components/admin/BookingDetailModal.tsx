@@ -21,6 +21,11 @@ import {
   History,
   Loader2,
   Trash2,
+  Tag,
+  Percent,
+  Edit2,
+  MinusCircle,
+  Plus,
 } from "lucide-react";
 import { formatDisplayDate, format12Hour } from "@/lib/utils/date";
 import { SlotAvailability } from "../user/SchedulePicker";
@@ -36,6 +41,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
   onClose,
   onUpdate,
 }) => {
+  const [currentBooking, setCurrentBooking] = useState<any>(booking);
   const [actionLoading, setActionLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -49,12 +55,29 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
 
   // Admin Reschedule State (No 48h rule for Admin!)
   const [showReschedulePrompt, setShowReschedulePrompt] = useState(false);
-  const [newRescheduleDate, setNewRescheduleDate] = useState(booking.date);
+  const [newRescheduleDate, setNewRescheduleDate] = useState(currentBooking.date);
   const [rescheduleSlots, setRescheduleSlots] = useState<SlotAvailability[]>([]);
   const [selectedRescheduleSlotId, setSelectedRescheduleSlotId] = useState("");
 
+  // Special Discount State
+  const [showDiscountPrompt, setShowDiscountPrompt] = useState(false);
+  const [discountInput, setDiscountInput] = useState<string>(
+    (currentBooking.specialDiscount ?? 0).toString()
+  );
+  const [discountReasonInput, setDiscountReasonInput] = useState<string>("");
+  const [discountValidationMsg, setDiscountValidationMsg] = useState<string | null>(null);
+  const [discountLoading, setDiscountLoading] = useState(false);
+
   // Screenshot viewer toggle
   const [showFullScreenshot, setShowFullScreenshot] = useState(false);
+
+  const originalPrice =
+    currentBooking.originalPrice ?? currentBooking.discountedPrice ?? currentBooking.finalPrice ?? 0;
+  const specialDiscount = currentBooking.specialDiscount ?? 0;
+  const finalPrice =
+    currentBooking.finalPrice ?? Math.max(0, originalPrice - specialDiscount);
+  const paymentAmount = currentBooking.paymentAmount ?? 0;
+  const dueAmount = finalPrice - paymentAmount;
 
   const fetchRescheduleSlots = async (date: string) => {
     try {
@@ -73,7 +96,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
     setErrorMsg(null);
 
     try {
-      const res = await fetch(`/api/admin/bookings/${booking._id}`, {
+      const res = await fetch(`/api/admin/bookings/${currentBooking._id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, ...payload }),
@@ -84,8 +107,14 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
         throw new Error(data.error || `Failed to perform ${action}`);
       }
 
+      if (data.booking) {
+        setCurrentBooking(data.booking);
+      }
+
       onUpdate();
-      onClose();
+      if (action !== "UPDATE_DISCOUNT") {
+        onClose();
+      }
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to execute action.");
     } finally {
@@ -93,7 +122,49 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
     }
   };
 
-  const dueAmount = booking.finalPrice - (booking.paymentAmount || 0);
+  const handleSaveDiscount = async (amount: number, reason?: string) => {
+    if (isNaN(amount) || amount < 0) {
+      setDiscountValidationMsg("Special discount cannot be negative.");
+      return;
+    }
+    if (amount > originalPrice) {
+      setDiscountValidationMsg(
+        `Special discount (৳${amount.toLocaleString()}) cannot exceed original price of ৳${originalPrice.toLocaleString()}.`
+      );
+      return;
+    }
+
+    setDiscountLoading(true);
+    setDiscountValidationMsg(null);
+
+    try {
+      const res = await fetch(`/api/admin/bookings/${currentBooking._id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "UPDATE_DISCOUNT",
+          specialDiscount: amount,
+          discountReason: reason || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to update special discount");
+      }
+
+      if (data.booking) {
+        setCurrentBooking(data.booking);
+      }
+      setShowDiscountPrompt(false);
+      setDiscountReasonInput("");
+      onUpdate();
+    } catch (err: any) {
+      setDiscountValidationMsg(err.message || "Failed to update discount");
+    } finally {
+      setDiscountLoading(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-stadium-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-fadeIn">
@@ -102,15 +173,17 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
         <div className="px-6 py-4 bg-gradient-to-r from-stadium-850 to-stadium-900 border-b border-stadium-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-pitch-950 text-pitch-400 border border-pitch-500/30">
-              #{booking.bookingId}
+              #{currentBooking.bookingId}
             </span>
             <div>
               <h3 className="font-display font-extrabold text-base sm:text-lg text-white">
                 Booking Details
               </h3>
               <p className="text-[11px] text-stadium-400">
-                Created on {new Date(booking.createdAt).toLocaleString()} by{" "}
-                <strong className="text-white">{booking.createdBy}</strong>
+                Created on {new Date(currentBooking.createdAt).toLocaleString()} by{" "}
+                <strong className="text-white">
+                  {currentBooking.bookingSource || currentBooking.createdBy}
+                </strong>
               </p>
             </div>
           </div>
@@ -137,25 +210,25 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
             <div>
               <p className="text-xs text-stadium-400">Current Status</p>
               <div className="mt-1">
-                {booking.status === "PENDING" && (
+                {currentBooking.status === "PENDING" && (
                   <span className="px-3 py-1 rounded-full text-xs font-black bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 inline-flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-yellow-400 animate-ping" />
                     PENDING APPROVAL
                   </span>
                 )}
-                {booking.status === "CONFIRMED" && (
+                {currentBooking.status === "CONFIRMED" && (
                   <span className="px-3 py-1 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 inline-flex items-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                     CONFIRMED
                   </span>
                 )}
-                {booking.status === "DECLINED" && (
+                {currentBooking.status === "DECLINED" && (
                   <span className="px-3 py-1 rounded-full text-xs font-black bg-red-500/20 text-red-300 border border-red-500/30 inline-flex items-center gap-1.5">
                     <XCircle className="w-4 h-4 text-red-400" />
                     DECLINED
                   </span>
                 )}
-                {booking.status === "CANCELLED" && (
+                {currentBooking.status === "CANCELLED" && (
                   <span className="px-3 py-1 rounded-full text-xs font-black bg-stadium-700 text-stadium-300 border border-stadium-600 inline-flex items-center gap-1.5">
                     CANCELLED
                   </span>
@@ -165,7 +238,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
 
             {/* Action Buttons for Pending or Active */}
             <div className="flex flex-wrap items-center gap-2">
-              {booking.status === "PENDING" && (
+              {currentBooking.status === "PENDING" && (
                 <>
                   <button
                     disabled={actionLoading}
@@ -370,26 +443,26 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
               <div className="text-xs space-y-1.5">
                 <p className="flex justify-between">
                   <span className="text-stadium-400">Name:</span>
-                  <strong className="text-white">{booking.customerName}</strong>
+                  <strong className="text-white">{currentBooking.customerName}</strong>
                 </p>
                 <p className="flex justify-between">
                   <span className="text-stadium-400">Mobile:</span>
-                  <a href={`tel:${booking.mobile}`} className="text-pitch-300 font-mono hover:underline">
-                    {booking.mobile}
+                  <a href={`tel:${currentBooking.mobile}`} className="text-pitch-300 font-mono hover:underline">
+                    {currentBooking.mobile}
                   </a>
                 </p>
-                {booking.email && (
+                {currentBooking.email && (
                   <p className="flex justify-between">
                     <span className="text-stadium-400">Email:</span>
-                    <a href={`mailto:${booking.email}`} className="text-blue-300 hover:underline truncate max-w-[160px]">
-                      {booking.email}
+                    <a href={`mailto:${currentBooking.email}`} className="text-blue-300 hover:underline truncate max-w-[160px]">
+                      {currentBooking.email}
                     </a>
                   </p>
                 )}
-                {booking.address && (
+                {currentBooking.address && (
                   <p className="flex justify-between">
                     <span className="text-stadium-400">Area:</span>
-                    <span className="text-stadium-200">{booking.address}</span>
+                    <span className="text-stadium-200">{currentBooking.address}</span>
                   </p>
                 )}
               </div>
@@ -404,54 +477,228 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
               <div className="text-xs space-y-1.5">
                 <p className="flex justify-between">
                   <span className="text-stadium-400">Date:</span>
-                  <strong className="text-white">{formatDisplayDate(booking.date)}</strong>
+                  <strong className="text-white">{formatDisplayDate(currentBooking.date)}</strong>
                 </p>
                 <p className="flex justify-between">
                   <span className="text-stadium-400">Time:</span>
                   <strong className="text-pitch-300">
-                    {format12Hour(booking.startTime)} – {format12Hour(booking.endTime)}
+                    {format12Hour(currentBooking.startTime)} – {format12Hour(currentBooking.endTime)}
                   </strong>
                 </p>
                 <p className="flex justify-between">
                   <span className="text-stadium-400">Type:</span>
-                  <span className="uppercase font-bold text-stadium-200">{booking.slotType} Slot</span>
+                  <span className="uppercase font-bold text-stadium-200">{currentBooking.slotType} Slot</span>
                 </p>
                 <p className="flex justify-between">
                   <span className="text-stadium-400">Slot ID:</span>
-                  <span className="font-mono text-stadium-300">{booking.slotId}</span>
+                  <span className="font-mono text-stadium-300">{currentBooking.slotId}</span>
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Payment & bKash Screenshot Grid */}
+          {/* Pricing, Payment & bKash Screenshot Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Payment Summary */}
-            <div className="p-4 rounded-xl bg-stadium-850 border border-stadium-700 space-y-2.5">
-              <h4 className="font-bold text-xs text-white uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-stadium-800">
-                <DollarSign className="w-3.5 h-3.5 text-gold-400" />
-                Payment Breakdown
-              </h4>
+            {/* Pricing & Payment Summary */}
+            <div className="p-4 rounded-xl bg-stadium-850 border border-stadium-700 space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-stadium-800">
+                <h4 className="font-bold text-xs text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <DollarSign className="w-3.5 h-3.5 text-gold-400" />
+                  Pricing & Payment
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDiscountInput(specialDiscount.toString());
+                    setDiscountReasonInput("");
+                    setDiscountValidationMsg(null);
+                    setShowDiscountPrompt(!showDiscountPrompt);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-pitch-500/20 hover:bg-pitch-500/30 text-pitch-300 border border-pitch-500/40 text-[11px] font-bold flex items-center gap-1 transition-all"
+                  id="btn-toggle-special-discount"
+                >
+                  <Tag className="w-3 h-3 text-pitch-400" />
+                  <span>{specialDiscount > 0 ? "Edit Discount" : "Special Discount"}</span>
+                </button>
+              </div>
+
+              {/* Pricing breakdown */}
               <div className="text-xs space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-stadium-400">Total Slot Fee:</span>
-                  <strong className="text-white">৳{booking.finalPrice?.toLocaleString()}</strong>
+                <div className="flex justify-between items-center">
+                  <span className="text-stadium-400">Original Price:</span>
+                  <span className="font-semibold text-stadium-200">৳{originalPrice.toLocaleString()}</span>
                 </div>
-                <div className="flex justify-between">
+
+                <div className="flex justify-between items-center">
+                  <span className="text-stadium-400 flex items-center gap-1">
+                    Special Discount:
+                    {specialDiscount > 0 && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        Admin
+                      </span>
+                    )}
+                  </span>
+                  <span className={`font-bold ${specialDiscount > 0 ? "text-amber-400" : "text-stadium-400"}`}>
+                    {specialDiscount > 0 ? `- ৳${specialDiscount.toLocaleString()}` : "৳0"}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center pt-1.5 border-t border-stadium-800/80">
+                  <span className="text-stadium-300 font-bold">Final Price:</span>
+                  <strong className="text-pitch-300 text-sm font-black">
+                    ৳{finalPrice.toLocaleString()}
+                  </strong>
+                </div>
+
+                <div className="flex justify-between items-center pt-1.5 border-t border-stadium-800/60">
                   <span className="text-stadium-400">Advance Paid:</span>
-                  <strong className="text-emerald-400">৳{booking.paymentAmount?.toLocaleString() || "0"}</strong>
+                  <strong className="text-emerald-400">৳{paymentAmount.toLocaleString()}</strong>
                 </div>
-                <div className="flex justify-between font-bold">
+
+                <div className="flex justify-between items-center font-bold">
                   <span className="text-stadium-400">Due at Turf:</span>
-                  <strong className="text-white text-sm">৳{dueAmount.toLocaleString()}</strong>
+                  <strong className="text-white">৳{dueAmount.toLocaleString()}</strong>
                 </div>
-                {booking.transactionId && (
-                  <div className="pt-2 border-t border-stadium-800 flex justify-between">
+
+                {currentBooking.transactionId && (
+                  <div className="pt-2 border-t border-stadium-800 flex justify-between items-center">
                     <span className="text-stadium-400">bKash TrxID:</span>
-                    <span className="font-mono font-bold text-pitch-300">{booking.transactionId}</span>
+                    <span className="font-mono font-bold text-pitch-300">{currentBooking.transactionId}</span>
                   </div>
                 )}
               </div>
+
+              {/* Special Discount Edit Form */}
+              {showDiscountPrompt && (
+                <div className="mt-3 p-3.5 rounded-xl bg-stadium-900 border border-pitch-500/40 space-y-3 animate-fadeIn">
+                  <div className="flex items-center justify-between pb-1 border-b border-stadium-800">
+                    <span className="text-[11px] font-bold text-pitch-300 uppercase tracking-wider flex items-center gap-1">
+                      <Percent className="w-3 h-3" />
+                      Admin Special Discount
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowDiscountPrompt(false)}
+                      className="text-[11px] text-stadium-400 hover:text-white"
+                    >
+                      Close
+                    </button>
+                  </div>
+
+                  {discountValidationMsg && (
+                    <div className="p-2 rounded-lg bg-red-950/60 border border-red-700 text-red-300 text-[11px] flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                      <span>{discountValidationMsg}</span>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-stadium-300 mb-1">
+                        Special Discount Amount (৳):
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max={originalPrice}
+                        value={discountInput}
+                        onChange={(e) => {
+                          setDiscountInput(e.target.value);
+                          const val = Number(e.target.value);
+                          if (val < 0) {
+                            setDiscountValidationMsg("Special discount cannot be negative.");
+                          } else if (val > originalPrice) {
+                            setDiscountValidationMsg(
+                              `Special discount (৳${val.toLocaleString()}) cannot exceed original price (৳${originalPrice.toLocaleString()}).`
+                            );
+                          } else {
+                            setDiscountValidationMsg(null);
+                          }
+                        }}
+                        placeholder="e.g. 500"
+                        className="w-full px-3 py-1.5 rounded-lg bg-stadium-850 border border-stadium-700 text-white text-xs focus:outline-none focus:border-pitch-500 font-mono"
+                        id="input-special-discount-amount"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-stadium-300 mb-1">
+                        Reason / Note (Optional):
+                      </label>
+                      <input
+                        type="text"
+                        value={discountReasonInput}
+                        onChange={(e) => setDiscountReasonInput(e.target.value)}
+                        placeholder="e.g. Regular team, promotional discount..."
+                        className="w-full px-3 py-1.5 rounded-lg bg-stadium-850 border border-stadium-700 text-white text-xs focus:outline-none focus:border-pitch-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Calculation Preview */}
+                  {(() => {
+                    const parsed = Number(discountInput) || 0;
+                    const previewFinal = Math.max(0, originalPrice - parsed);
+                    const isExceeding = parsed > originalPrice;
+                    return (
+                      <div className="p-2 rounded-lg bg-stadium-850 border border-stadium-750 text-[11px] flex justify-between items-center">
+                        <span className="text-stadium-400">
+                          Final Price: ৳{originalPrice.toLocaleString()} − ৳{parsed.toLocaleString()} =
+                        </span>
+                        <span
+                          className={`font-black ${
+                            isExceeding ? "text-red-400" : "text-pitch-300"
+                          }`}
+                        >
+                          ৳{previewFinal.toLocaleString()}
+                        </span>
+                      </div>
+                    );
+                  })()}
+
+                  <div className="flex items-center justify-between pt-1">
+                    {specialDiscount > 0 ? (
+                      <button
+                        type="button"
+                        disabled={discountLoading}
+                        onClick={() => handleSaveDiscount(0, "Special discount removed by Admin")}
+                        className="px-2.5 py-1 rounded-lg bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800 text-[11px] font-bold flex items-center gap-1 transition-colors"
+                      >
+                        <MinusCircle className="w-3 h-3" />
+                        <span>Remove Discount</span>
+                      </button>
+                    ) : (
+                      <div />
+                    )}
+
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowDiscountPrompt(false)}
+                        className="px-3 py-1 rounded-lg bg-stadium-800 text-stadium-400 text-[11px] font-semibold hover:text-white"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={
+                          discountLoading ||
+                          Number(discountInput) < 0 ||
+                          Number(discountInput) > originalPrice
+                        }
+                        onClick={() =>
+                          handleSaveDiscount(Number(discountInput) || 0, discountReasonInput)
+                        }
+                        className="px-3.5 py-1 rounded-lg bg-pitch-500 hover:bg-pitch-400 text-stadium-950 text-[11px] font-black shadow-glow disabled:opacity-50 flex items-center gap-1"
+                        id="btn-save-special-discount"
+                      >
+                        {discountLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+                        <span>Save Discount</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Payment Screenshot Box */}
@@ -461,14 +708,14 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                 Payment Screenshot
               </h4>
 
-              {booking.paymentScreenshot ? (
+              {currentBooking.paymentScreenshot ? (
                 <div className="space-y-2">
                   <div
                     onClick={() => setShowFullScreenshot(true)}
                     className="relative w-full h-28 rounded-lg overflow-hidden bg-stadium-950 border border-stadium-700 cursor-pointer group hover:border-pitch-500 transition-colors"
                   >
                     <img
-                      src={booking.paymentScreenshot}
+                      src={currentBooking.paymentScreenshot}
                       alt="bKash Payment Screenshot"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                     />
@@ -488,6 +735,60 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                 <p className="text-xs text-stadium-500 py-4">No payment screenshot attached.</p>
               )}
             </div>
+          </div>
+
+          {/* Special Discount History Section */}
+          <div className="p-4 rounded-xl bg-stadium-850 border border-stadium-700 space-y-3">
+            <h4 className="font-bold text-xs text-white uppercase tracking-wider flex items-center gap-1.5 pb-2 border-b border-stadium-800">
+              <Percent className="w-3.5 h-3.5 text-amber-400" />
+              Discount History
+            </h4>
+
+            {currentBooking.discountHistory && currentBooking.discountHistory.length > 0 ? (
+              <div className="space-y-2">
+                {currentBooking.discountHistory.map((item: any, idx: number) => (
+                  <div
+                    key={idx}
+                    className="p-2.5 rounded-lg bg-stadium-900 border border-stadium-800 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-stadium-200">
+                          ৳{item.previousDiscount?.toLocaleString()} → ৳{item.newDiscount?.toLocaleString()}
+                        </span>
+                        <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                          {item.newDiscount > item.previousDiscount
+                            ? `+৳${(item.newDiscount - item.previousDiscount).toLocaleString()}`
+                            : item.newDiscount === 0
+                            ? "Removed"
+                            : `-৳${(item.previousDiscount - item.newDiscount).toLocaleString()}`}
+                        </span>
+                      </div>
+                      {item.reason && (
+                        <p className="text-[11px] text-stadium-400 mt-0.5">Reason: {item.reason}</p>
+                      )}
+                    </div>
+                    <div className="text-right text-[10px] text-stadium-500 shrink-0">
+                      <p className="font-medium text-stadium-300">By {item.changedBy}</p>
+                      <p>
+                        {new Date(item.timestamp).toLocaleString("en-US", {
+                          timeZone: "Asia/Dhaka",
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[11px] text-stadium-500 py-1">
+                No special discounts have been recorded for this booking.
+              </p>
+            )}
           </div>
 
           {/* Audit Trail & History */}

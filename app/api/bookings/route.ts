@@ -145,6 +145,8 @@ export async function POST(request: NextRequest) {
       endTime: slot.endTime,
       regularPrice: slot.regularPrice,
       discountedPrice: slot.discountedPrice,
+      originalPrice: slot.discountedPrice,
+      specialDiscount: 0,
       finalPrice: slot.discountedPrice,
       paymentRequired: requiredAdvance,
       paymentAmount: requiredAdvance,
@@ -153,6 +155,8 @@ export async function POST(request: NextRequest) {
       paymentScreenshot: screenshotUrl,
       status: "PENDING",
       createdBy: "USER",
+      bookingSource: "USER",
+      discountHistory: [],
       scheduleChangeHistory: [],
       auditLog: [
         {

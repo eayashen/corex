@@ -33,6 +33,7 @@ export const ManualBookingModal: React.FC<ManualBookingModalProps> = ({
   const [selectedSlotId, setSelectedSlotId] = useState("");
   const [status, setStatus] = useState<"CONFIRMED" | "PENDING">("CONFIRMED");
   const [paymentAmount, setPaymentAmount] = useState<string>("0");
+  const [specialDiscount, setSpecialDiscount] = useState<string>("0");
   const [adminNote, setAdminNote] = useState("");
 
   const [loadingSlots, setLoadingSlots] = useState(false);
@@ -65,6 +66,8 @@ export const ManualBookingModal: React.FC<ManualBookingModalProps> = ({
     fetchSlotsForDate(date);
   }, [date]);
 
+  const selectedSlot = slots.find((s) => s.slotId === selectedSlotId);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -86,6 +89,18 @@ export const ManualBookingModal: React.FC<ManualBookingModalProps> = ({
       return;
     }
 
+    const discountNum = Number(specialDiscount) || 0;
+    if (discountNum < 0) {
+      setErrorMsg("Special discount cannot be negative.");
+      return;
+    }
+    if (selectedSlot && discountNum > selectedSlot.discountedPrice) {
+      setErrorMsg(
+        `Special discount (৳${discountNum.toLocaleString()}) cannot exceed slot price (৳${selectedSlot.discountedPrice.toLocaleString()}).`
+      );
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -100,6 +115,7 @@ export const ManualBookingModal: React.FC<ManualBookingModalProps> = ({
           slotId: selectedSlotId,
           status,
           paymentAmount: Number(paymentAmount) || 0,
+          specialDiscount: discountNum,
           adminNote: adminNote.trim() || undefined,
         }),
       });
@@ -117,8 +133,6 @@ export const ManualBookingModal: React.FC<ManualBookingModalProps> = ({
       setSubmitting(false);
     }
   };
-
-  const selectedSlot = slots.find((s) => s.slotId === selectedSlotId);
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-stadium-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-fadeIn">
@@ -254,7 +268,7 @@ export const ManualBookingModal: React.FC<ManualBookingModalProps> = ({
             )}
           </div>
 
-          {/* Payment & Notes */}
+          {/* Payment & Discount */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-stadium-300 mb-1.5">
@@ -262,13 +276,31 @@ export const ManualBookingModal: React.FC<ManualBookingModalProps> = ({
               </label>
               <input
                 type="number"
+                min="0"
                 value={paymentAmount}
                 onChange={(e) => setPaymentAmount(e.target.value)}
                 placeholder="500"
-                className="w-full px-3.5 py-2.5 rounded-xl bg-stadium-850 border border-stadium-700 text-stadium-100 text-xs focus:outline-none focus:border-pitch-500"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-stadium-850 border border-stadium-700 text-stadium-100 text-xs focus:outline-none focus:border-pitch-500 font-mono"
               />
             </div>
 
+            <div>
+              <label className="block text-xs font-semibold text-stadium-300 mb-1.5">
+                Special Discount (৳)
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={specialDiscount}
+                onChange={(e) => setSpecialDiscount(e.target.value)}
+                placeholder="0"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-stadium-850 border border-stadium-700 text-stadium-100 text-xs focus:outline-none focus:border-pitch-500 font-mono"
+                id="input-manual-special-discount"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-stadium-300 mb-1.5">
                 Customer Email (Optional)
@@ -281,25 +313,39 @@ export const ManualBookingModal: React.FC<ManualBookingModalProps> = ({
                 className="w-full px-3.5 py-2.5 rounded-xl bg-stadium-850 border border-stadium-700 text-stadium-100 text-xs focus:outline-none focus:border-pitch-500"
               />
             </div>
-          </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-stadium-300 mb-1.5">
-              Admin Note (Optional)
-            </label>
-            <input
-              type="text"
-              value={adminNote}
-              onChange={(e) => setAdminNote(e.target.value)}
-              placeholder="e.g. Walk-in customer paid ৳500 cash in advance"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-stadium-850 border border-stadium-700 text-stadium-100 text-xs focus:outline-none focus:border-pitch-500"
-            />
+            <div>
+              <label className="block text-xs font-semibold text-stadium-300 mb-1.5">
+                Admin Note (Optional)
+              </label>
+              <input
+                type="text"
+                value={adminNote}
+                onChange={(e) => setAdminNote(e.target.value)}
+                placeholder="e.g. Walk-in regular team discount"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-stadium-850 border border-stadium-700 text-stadium-100 text-xs focus:outline-none focus:border-pitch-500"
+              />
+            </div>
           </div>
 
           {selectedSlot && (
-            <div className="p-3 rounded-xl bg-pitch-950/40 border border-pitch-500/30 text-xs flex justify-between">
-              <span className="text-pitch-300">Total Slot Fee:</span>
-              <strong className="text-white">৳{selectedSlot.discountedPrice.toLocaleString()}</strong>
+            <div className="p-3 rounded-xl bg-stadium-850 border border-stadium-750 text-xs space-y-1.5">
+              <div className="flex justify-between text-stadium-400">
+                <span>Original Slot Fee:</span>
+                <span>৳{selectedSlot.discountedPrice.toLocaleString()}</span>
+              </div>
+              {Number(specialDiscount) > 0 && (
+                <div className="flex justify-between text-amber-400 font-semibold">
+                  <span>Special Discount:</span>
+                  <span>- ৳{Number(specialDiscount).toLocaleString()}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-black text-white pt-1 border-t border-stadium-800">
+                <span className="text-pitch-300">Final Price:</span>
+                <span className="text-pitch-300">
+                  ৳{Math.max(0, selectedSlot.discountedPrice - (Number(specialDiscount) || 0)).toLocaleString()}
+                </span>
+              </div>
             </div>
           )}
 

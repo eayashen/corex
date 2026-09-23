@@ -42,8 +42,9 @@ export async function GET(request: NextRequest) {
       query.slotType = slotType;
     }
 
-    if (createdBy && createdBy !== "ALL") {
-      query.createdBy = createdBy;
+    const bookingSource = searchParams.get("bookingSource") || createdBy;
+    if (bookingSource && bookingSource !== "ALL") {
+      query.$or = [{ bookingSource }, { createdBy: bookingSource }];
     }
 
     if (search) {
@@ -90,6 +91,7 @@ export async function POST(request: NextRequest) {
       address,
       paymentAmount = 0,
       adminNote,
+      specialDiscount: requestedDiscount = 0,
     } = body;
 
     // Admin manual bookings only require Name, Mobile, Date, Slot
@@ -145,8 +147,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const originalPrice = slot.discountedPrice;
+    const specialDiscount = Math.max(0, Number(requestedDiscount) || 0);
+
+    if (specialDiscount > originalPrice) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Special discount (৳${specialDiscount.toLocaleString()}) cannot exceed original price (৳${originalPrice.toLocaleString()}).`,
+        },
+        { status: 400 }
+      );
+    }
+
+    const finalPrice = Math.max(0, originalPrice - specialDiscount);
     const bookingId = await generateBookingId();
     const cleanMobile = mobile.replace(/[\s-]/g, "");
+
+    const discountHistory =
+      specialDiscount > 0
+        ? [
+            {
+              previousDiscount: 0,
+              newDiscount: specialDiscount,
+              changedBy: admin.name || "ADMIN",
+              timestamp: new Date(),
+              reason: adminNote || "Initial admin special discount given during creation",
+            },
+          ]
+        : [];
 
     const newBooking = new Booking({
       bookingId,
@@ -161,20 +190,26 @@ export async function POST(request: NextRequest) {
       endTime: slot.endTime,
       regularPrice: slot.regularPrice,
       discountedPrice: slot.discountedPrice,
-      finalPrice: slot.discountedPrice,
+      originalPrice,
+      specialDiscount,
+      finalPrice,
       paymentRequired: 0,
       paymentAmount: Number(paymentAmount) || 0,
       paymentMethod: "Cash / Direct Admin",
       status: status === "PENDING" ? "PENDING" : "CONFIRMED",
       createdBy: "ADMIN",
+      bookingSource: "ADMIN",
       adminNote: adminNote || "Manual walk-in / phone booking created by admin",
+      discountHistory,
       scheduleChangeHistory: [],
       auditLog: [
         {
           action: "Manual booking created by ADMIN",
           actor: "ADMIN",
           timestamp: new Date(),
-          details: `Created by ${admin.name} (${admin.email}) with status ${status}`,
+          details: `Created by ${admin.name} (${admin.email}) with status ${status}${
+            specialDiscount > 0 ? `, Special discount: ৳${specialDiscount}` : ""
+          }`,
         },
       ],
     });
