@@ -392,11 +392,10 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                         key={s.slotId}
                         type="button"
                         onClick={() => setSelectedRescheduleSlotId(s.slotId)}
-                        className={`p-2 rounded-lg border text-left text-xs transition-all ${
-                          selectedRescheduleSlotId === s.slotId
+                        className={`p-2 rounded-lg border text-left text-xs transition-all ${selectedRescheduleSlotId === s.slotId
                             ? "bg-pitch-500 text-stadium-950 font-bold border-pitch-400"
                             : "bg-stadium-900 hover:bg-stadium-800 border-stadium-700 text-stadium-200"
-                        }`}
+                          }`}
                       >
                         <p>{s.label}</p>
                         <p className={`text-[10px] ${selectedRescheduleSlotId === s.slotId ? "text-stadium-950" : "text-pitch-400"}`}>
@@ -623,7 +622,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
 
                     <div>
                       <label className="block text-[11px] font-semibold text-stadium-300 mb-1">
-                        Reason / Note (Optional):
+                        Note (Optional):
                       </label>
                       <input
                         type="text"
@@ -646,9 +645,8 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                           Final Price: ৳{originalPrice.toLocaleString()} − ৳{parsed.toLocaleString()} =
                         </span>
                         <span
-                          className={`font-black ${
-                            isExceeding ? "text-red-400" : "text-pitch-300"
-                          }`}
+                          className={`font-black ${isExceeding ? "text-red-400" : "text-pitch-300"
+                            }`}
                         >
                           ৳{previewFinal.toLocaleString()}
                         </span>
@@ -760,12 +758,12 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                           {item.newDiscount > item.previousDiscount
                             ? `+৳${(item.newDiscount - item.previousDiscount).toLocaleString()}`
                             : item.newDiscount === 0
-                            ? "Removed"
-                            : `-৳${(item.previousDiscount - item.newDiscount).toLocaleString()}`}
+                              ? "Removed"
+                              : `-৳${(item.previousDiscount - item.newDiscount).toLocaleString()}`}
                         </span>
                       </div>
                       {item.reason && (
-                        <p className="text-[11px] text-stadium-400 mt-0.5">Reason: {item.reason}</p>
+                        <p className="text-[11px] text-stadium-400 mt-0.5">Note: {item.reason}</p>
                       )}
                     </div>
                     <div className="text-right text-[10px] text-stadium-500 shrink-0">
@@ -795,7 +793,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
           <div className="p-4 rounded-xl bg-stadium-850 border border-stadium-700 space-y-3">
             <h4 className="font-bold text-xs text-white uppercase tracking-wider flex items-center gap-1.5">
               <History className="w-3.5 h-3.5 text-pitch-400" />
-              Activity History & Audit Trail
+              Activity History
             </h4>
 
             <div className="space-y-2 text-xs">

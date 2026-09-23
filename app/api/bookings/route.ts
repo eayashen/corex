@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
           details: `Advance payment ৳${requiredAdvance} via bKash`,
         },
         {
-          action: "Payment screenshot stored in Cloudinary (Turf folder)",
+          action: "Payment screenshot uploaded successfully",
           actor: "USER",
           timestamp: new Date(),
           details: transactionId ? `TrxID: ${transactionId}` : "Screenshot uploaded",
